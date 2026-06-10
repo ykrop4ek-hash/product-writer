@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Генератор описаний товаров</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5;
+           min-height: 100vh; padding: 2rem 1rem; color: #1a1a1a; }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+    .card { background: #fff; border-radius: 12px; padding: 1.5rem;
+            border: 1px solid #e5e5e5; margin-bottom: 1.5rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 500;
+            color: #444; margin-bottom: 0.4rem; }
+    input, textarea, select {
+      width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 0.95rem; font-family: inherit;
+      transition: border-color .15s; outline: none; }
+    input:focus, textarea:focus, select:focus { border-color: #7c6ff7; }
+    textarea { resize: vertical; min-height: 90px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .field { margin-bottom: 1rem; }
+    button {
+      width: 100%; padding: 0.75rem; background: #7c6ff7; color: #fff;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: 500;
+      cursor: pointer; transition: background .15s; }
+    button:hover { background: #6358e8; }
+    button:disabled { background: #b0aaff; cursor: not-allowed; }
+    .result-card { display: none; }
+    .result-card.visible { display: block; }
+    .result-text { line-height: 1.7; font-size: 0.95rem; color: #222;
+                   white-space: pre-wrap; }
+    .copy-btn { margin-top: 1rem; width: auto; padding: 0.5rem 1.2rem;
+                background: transparent; color: #7c6ff7;
+                border: 1px solid #7c6ff7; font-size: 0.85rem; }
+    .copy-btn:hover { background: #f0eeff; }
+    .error { color: #c0392b; font-size: 0.9rem; margin-top: 0.5rem; display: none; }
+    .spinner { display: inline-block; width: 16px; height: 16px;
+               border: 2px solid #fff; border-top-color: transparent;
+               border-radius: 50%; animation: spin .7s linear infinite;
+               vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Генератор описаний товаров</h1>
+  <p class="subtitle">Заполни параметры — получи готовый текст для карточки товара</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="field">
+        <label>Название товара *</label>
+        <input type="text" id="name" placeholder="Кроссовки Nike Air Max 90">
+      </div>
+      <div class="field">
+        <label>Категория</label>
+        <input type="text" id="category" placeholder="Обувь, электроника...">
+      </div>
+    </div>
+    <div class="field">
+      <label>Характеристики *</label>
+      <textarea id="features"
+        placeholder="Материал подошвы: пена Air, верх: сетка + кожа, вес: 320г, цвета: белый/серый"></textarea>
+    </div>
+    <div class="field">
+      <label>Тон текста</label>
+      <select id="tone">
+        <option value="нейтральный">Нейтральный</option>
+        <option value="энергичный и молодёжный">Энергичный / молодёжный</option>
+        <option value="экспертный и доверительный">Экспертный / доверительный</option>
+        <option value="премиальный и утончённый">Премиальный / люксовый</option>
+      </select>
+    </div>
+    <button id="btn" onclick="generate()">Сгенерировать описание</button>
+    <p class="error" id="error"></p>
+  </div>
+
+  <div class="card result-card" id="result-card">
+    <label style="margin-bottom:0.75rem">Готовое описание</label>
+    <p class="result-text" id="result-text"></p>
+    <button class="copy-btn" onclick="copyText()">Скопировать</button>
+  </div>
+</div>
+
+<script>
+  const csrfToken = "{{ csrf_token }}";
+
+  async function generate() {
+    const name     = document.getElementById("name").value.trim();
+    const category = document.getElementById("category").value.trim();
+    const features = document.getElementById("features").value.trim();
+    const tone     = document.getElementById("tone").value;
+    const btn      = document.getElementById("btn");
+    const errorEl  = document.getElementById("error");
+
+    errorEl.style.display = "none";
+
+    if (!name || !features) {
+      errorEl.textContent = "Заполни название и характеристики";
+      errorEl.style.display = "block";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Генерирую...';
+
+    try {
+      const resp = await fetch("/generate/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-CSRFToken": csrfToken,
+        },
+        body: new URLSearchParams({ name, category, features, tone }),
+      });
+      const data = await resp.json();
+
+      if (data.error) {
+        errorEl.textContent = data.error;
+        errorEl.style.display = "block";
+      } else {
+        document.getElementById("result-text").textContent = data.result;
+        document.getElementById("result-card").classList.add("visible");
+        document.getElementById("result-card").scrollIntoView({ behavior: "smooth" });
+      }
+    } catch {
+      errorEl.textContent = "Сетевая ошибка, попробуй ещё раз";
+      errorEl.style.display = "block";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Сгенерировать описание";
+    }
+  }
+
+  function copyText() {
+    const text = document.getElementById("result-text").textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector(".copy-btn");
+      btn.textContent = "Скопировано!";
+      setTimeout(() => btn.textContent = "Скопировать", 2000);
+    });
+  }
+</script>
+</body>
+</html>
